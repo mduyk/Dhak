@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>ADMIN V13 - QUẢN LÝ TỔNG</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <style>
+        :root { --blue: #0f3460; --pink: #e94560; --bg: #1a1a2e; }
+        body { font-family: sans-serif; background: var(--bg); color: #fff; padding: 20px; margin: 0; }
+        .box { background: #16213e; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #333; }
+        input, select, textarea { width: 100%; padding: 12px; margin: 10px 0; background: var(--blue); border: 1px solid #333; color: #fff; border-radius: 5px; box-sizing: border-box; }
+        button { background: var(--pink); color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 5px; font-weight: bold; margin: 5px 0; }
+        .grid-cat { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; }
+        .cat-card { background: #0b2239; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #444; }
+        .cat-card img { width: 100%; height: 100px; object-fit: cover; border-radius: 5px; }
+        .grid-acc { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+        .item-acc { background: var(--blue); padding: 8px; border-radius: 8px; text-align: center; }
+        .item-acc img { width: 100%; height: 80px; object-fit: cover; }
+    </style>
+</head>
+<body>
+
+    <div class="box">
+        <h3>1. TẠO DANH MỤC</h3>
+        <input type="text" id="cat-name" placeholder="Tên mục...">
+        <input type="file" id="cat-thumb" accept="image/*">
+        <select id="cat-mode">
+            <option value="modal">Mua luôn (Hiện thanh toán)</option>
+            <option value="page">Chuyển trang (Show full ảnh)</option>
+        </select>
+        <button onclick="upCat()">XÁC NHẬN TẠO</button>
+    </div>
+
+    <div class="box">
+        <h3>2. DANH SÁCH MỤC (Ấn để quản lý hoặc xóa)</h3>
+        <div id="list-cat-admin" class="grid-cat"></div>
+    </div>
+
+    <div id="area-acc" class="box" style="display:none">
+        <h3 id="target-title">SẢN PHẨM MỤC: ...</h3>
+        <button style="background:#0f9d58" onclick="document.getElementById('f-acc').style.display='block'">+ THÊM SẢN PHẨM</button>
+        <div id="f-acc" style="display:none; padding:15px; background:#0b2239; border-radius:8px;">
+            <input type="file" id="a-thumb" accept="image/*">
+            <input type="file" id="a-imgs" accept="image/*" multiple>
+            <input type="number" id="a-price" placeholder="Giá bán...">
+            <textarea id="a-info" placeholder="Mô tả..."></textarea>
+            <button onclick="upAcc()">ĐĂNG</button>
+            <button style="background:#555" onclick="document.getElementById('f-acc').style.display='none'">ĐÓNG</button>
+        </div>
+        <div class="grid-acc" id="list-a"></div>
+    </div>
+
+<script>
+    const config = { apiKey: "AIzaSyBk6R1TDZeAxh37JQLgL_6Wl0v8m8Sg0", databaseURL: "https://shopctv-61f96-default-rtdb.asia-southeast1.firebasedatabase.app/" };
+    firebase.initializeApp(config); const db = firebase.database();
+    const toB64 = f => new Promise(r => { const rd = new FileReader(); rd.readAsDataURL(f); rd.onload = () => r(rd.result); });
+    let curCat = "";
+
+    // Load danh mục (Có nút Xóa và Quản lý riêng)
+    db.ref('categories').on('value', s => {
+        const d = document.getElementById('list-cat-admin'); d.innerHTML = "";
+        s.forEach(c => {
+            const v = c.val();
+            d.innerHTML += `
+                <div class="cat-card">
+                    <img src="${v.img}">
+                    <h4 style="margin:8px 0">${v.name}</h4>
+                    <button onclick="selCat('${c.key}','${v.name}')" style="background:#0068ff; width:100%">Quản lý SP</button>
+                    <button onclick="delCat('${c.key}')" style="background:#444; width:100%">Xóa Mục</button>
+                </div>`;
+        });
+    });
+
+    async function upCat() {
+        const n = document.getElementById('cat-name').value, f = document.getElementById('cat-thumb').files[0], m = document.getElementById('cat-mode').value;
+        if(!n || !f) return alert("Nhập đủ tên và ảnh mục!");
+        const img = await toB64(f);
+        db.ref('categories').push({ name: n, img: img, mode: m }).then(() => alert("Đã tạo!"));
+    }
+
+    function delCat(id) { if(confirm("Xóa mục này sẽ mất sạch SP bên trong. Chắc chưa?")) { db.ref('categories/'+id).remove(); db.ref('products/'+id).remove(); } }
+
+    function selCat(id, name) {
+        curCat = id; document.getElementById('area-acc').style.display = 'block';
+        document.getElementById('target-title').innerText = "SẢN PHẨM MỤC: " + name;
+        db.ref('products/'+id).on('value', s => {
+            const d = document.getElementById('list-a'); d.innerHTML = "";
+            s.forEach(a => d.innerHTML += `<div class="item-acc"><img src="${a.val().thumb}"><p>${Number(a.val().price).toLocaleString()}đ</p><button onclick="delA('${a.key}')">Xóa</button></div>`);
+        });
+    }
+
+    async function upAcc() {
+        const p = document.getElementById('a-price').value, info = document.getElementById('a-info').value, ft = document.getElementById('a-thumb').files[0], fs = document.getElementById('a-imgs').files;
+        if(!ft || !p) return alert("Thiếu ảnh bìa hoặc giá!");
+        let arr = []; for(let f of fs) arr.push(await toB64(f));
+        const thumb = await toB64(ft);
+        db.ref('products/'+curCat).push({ price: p, info: info, thumb: thumb, imgs: arr }).then(() => { alert("Xong!"); document.getElementById('f-acc').style.display='none'; });
+    }
+
+    function delA(id) { if(confirm("Xóa SP?")) db.ref(`products/${curCat}/${id}`).remove(); }
+</script>
+</body>
+</html>
